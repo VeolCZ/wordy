@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 #define DEFFLAGSIZE 100
-#define FLAGCOUNT 4
+#define FLAGCOUNT 5
 
 #define HELPTEXT \
     "Wordy is a tool for simple csv parsing.\n\n\
@@ -15,7 +15,8 @@ Flags:\n\
     -d  delimiter for the file, defaults to \\n, one char only\n\
     -i  parse those that include letters 'abc'\n\
     -c  parse those that are composed of letters 'abc'\n\
-    -p  parse those that match a pattern '#a##b' with # being wildcard\n"
+    -p  parse those that match a pattern '#a##b' with # being wildcard\n\
+    -l  parse word of certain length\n"
 
 #define error_message(message)      \
     fprintf(stderr, "%s", message); \
@@ -27,11 +28,14 @@ Flags:\n\
 
 typedef char *String;
 
-enum flags { FILE_NAME, DELIMITER, INCLUDE, COMPOSE, PATTERN };
+enum flags { FILE_NAME, DELIMITER, INCLUDE, COMPOSE, PATTERN, LENGTH };
 
 String parse_arg(String);
 void parse_file(String *);
-void filter_line(String *, String);
+int filter_includes_line(String, String);
+int filter_composes_line(String, String);
+int filter_pattern_line(String, String);
+int filter_length_line(String, int);
 
 String parse_arg(String arg) {
     String res = malloc(strlen(arg) + 1);
@@ -48,32 +52,21 @@ String parse_arg(String arg) {
 void parse_file(String *flags) {
     FILE *file = fopen(flags[FILE_NAME], "r");
     String line = malloc(sizeof(char) * DEFFLAGSIZE);
-    int i = 0, max_size = DEFFLAGSIZE, failed = 0;
+    int i = 0, max_size = DEFFLAGSIZE;
     char c;
 
     if (file == NULL) {
         error_message("Unable to open file");
-        exit(1);
     }
 
     while ((c = getc(file)) != EOF) {
-        if (failed > 0 && c != flags[DELIMITER][0]) {
-            continue;
-        }
-
-        if (flags[COMPOSE] != NULL && failed == 0 &&
-            strchr(flags[COMPOSE], c) == NULL) {
-            failed = 1;
-        } else if (i == max_size) {
+        if (i == max_size) {
             max_size *= 2;
             line = realloc(line, max_size);
         } else if (c == flags[DELIMITER][0]) {
-            if (failed == 0) {
-                line[i] = '\0';
-                filter_line(flags, line);
-            }
+            line[i] = '\0';
             i = 0;
-            failed = 0;
+            // Add filtering
         } else {
             line[i++] = c;
         }
@@ -83,34 +76,88 @@ void parse_file(String *flags) {
     fclose(file);
 }
 
-void filter_line(String *flags, String line) { printf("%s\n", line); }
+int filter_includes_line(String line, String chars) {
+    if (line == NULL || chars == NULL) {
+        return -1;
+    }
+
+    while (*chars != '\0') {
+        if (strchr(line, *chars) == NULL) {
+            return -1;
+        }
+        chars++;
+    }
+
+    return 0;
+}
+
+int filter_composes_line(String line, String chars) {
+    if (line == NULL || chars == NULL) {
+        return -1;
+    }
+
+    while (*line != '\0') {
+        if (strchr(chars, *line) == NULL) {
+            return -1;
+        }
+        line++;
+    }
+
+    return 0;
+}
+
+int filter_pattern_line(String line, String pattern) {
+    if (line == NULL || pattern == NULL) {
+        return -1;
+    }
+    int p_size = strlen(pattern), l_size = strlen(line);
+    if (p_size > l_size) {
+        user_error_message();
+    }
+    while (l_size > p_size) {
+        pattern = realloc(pattern, l_size);
+        while (p_size++ < l_size) {
+            pattern[p_size] = '#';
+        }
+    }
+
+    while (--p_size > 0) {
+        if (pattern[p_size] != '#' && pattern[p_size] != line[p_size]) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int filter_length_line(String line, int length) {
+    return strlen(line) == length ? 0 : -1;
+}
 
 int main(int argc, String argv[]) {
     String flags[FLAGCOUNT] = {0};
-    String arg;
 
     if (argc % 2 != 0 || --argc < 1) {
         user_error_message();
     }
-    arg = *++argv;
+    ++argv;
 
-    if (strcmp(arg, "-h") == 0) {
+    if (strcmp(*argv, "-h") == 0) {
         printf("%s", HELPTEXT);
         exit(0);
-    } else if (access(arg, F_OK) != 0) {
+    } else if (access(*argv, F_OK) != 0) {
         user_error_message();
     }
 
-    flags[FILE_NAME] = (String)malloc(strlen(arg) + 1);
+    flags[FILE_NAME] = (String)malloc(strlen(*argv) + 1);
     if (!flags[FILE_NAME]) {
         memory_error_message();
     }
-    strncpy(flags[FILE_NAME], arg, strlen(arg));
-    flags[FILE_NAME][strlen(arg)] = '\0';
+    strncpy(flags[FILE_NAME], *argv, strlen(*argv));
+    flags[FILE_NAME][strlen(*argv)] = '\0';
 
     while ((argc -= 2) >= 0) {
-        arg = *(++argv);
-        switch (arg[1]) {
+        switch (*(++argv)[1]) {
             case 'd':
                 flags[DELIMITER] = parse_arg(*(++argv));
                 break;
@@ -121,6 +168,9 @@ int main(int argc, String argv[]) {
                 flags[COMPOSE] = parse_arg(*(++argv));
                 break;
             case 'p':
+                flags[PATTERN] = parse_arg(*(++argv));
+                break;
+            case 'l':
                 flags[PATTERN] = parse_arg(*(++argv));
                 break;
             default:
