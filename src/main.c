@@ -3,17 +3,18 @@
 #include <string.h>
 #include <unistd.h>
 
-#define DEFARGSIZE 100
-#define FLAGCOUNT 3
+#define DEFFLAGSIZE 100
+#define FLAGCOUNT 4
 
 #define HELPTEXT \
     "Wordy is a tool for simple csv parsing.\n\n\
 Usage:\n\
-    wordy <file_name> <args>\n\
+    wordy <file_path> <args>\n\
 Flags:\n\
     -h  help\n\
-    -d  delimiter for the file, defaults to \\n\n\
-    -i  parse those that include letters 'abc'\n"
+    -d  delimiter for the file, defaults to \\n, one char only\n\
+    -i  parse those that include letters 'abc'\n\
+    -p  parse those that match a pattern '#a##b' with # being wildcard\n"
 
 #define error_message(message)      \
     fprintf(stderr, "%s", message); \
@@ -23,9 +24,13 @@ Flags:\n\
     error_message("Invalid usage of Wordy. Use -h flag for help.\n")
 #define memory_error_message() error_message("Error system is out of memory.\n")
 
-typedef char* String;
+typedef char *String;
 
-enum flags { FILE_NAME, DELIMITER, INCLUDE };
+enum flags { FILE_NAME, DELIMITER, INCLUDE, PATTERN };
+
+String parse_arg(String);
+void parse_file(String *);
+void filter_line(String *, String);
 
 String parse_arg(String arg) {
     String res = (String)malloc(strlen(arg) + 1);
@@ -39,8 +44,42 @@ String parse_arg(String arg) {
     return res;
 }
 
+void parse_file(String *flags) {
+    FILE *file = fopen(flags[FILE_NAME], "r");
+    String line = malloc(sizeof(char) * DEFFLAGSIZE);
+    int i = 0, max_size = DEFFLAGSIZE;
+    char c;
+
+    if (file == NULL) {
+        error_message("Unable to open file");
+        exit(1);
+    }
+
+    while ((c = getc(file)) != EOF) {
+        if (i == max_size) {
+            max_size *= 2;
+            line = realloc(line, max_size);
+        } else if (c == flags[DELIMITER][0]) {
+            line[i] = '\0';
+            filter_line(flags, line);
+            i = 0;
+        } else {
+            line[i++] = c;
+        }
+    }
+
+    free(line);
+    fclose(file);
+}
+
+void filter_line(String *flags, String line) {
+    if (line[0] == 't') {
+        printf("%s\n", line);
+    }
+}
+
 int main(int argc, String argv[]) {
-    String args[FLAGCOUNT] = {NULL, NULL, NULL};
+    String flags[FLAGCOUNT] = {0};
     String arg;
 
     if (argc % 2 != 0 || --argc < 1) {
@@ -55,21 +94,24 @@ int main(int argc, String argv[]) {
         user_error_message();
     }
 
-    args[FILE_NAME] = (String)malloc(strlen(arg) + 1);
-    if (!args[FILE_NAME]) {
+    flags[FILE_NAME] = (String)malloc(strlen(arg) + 1);
+    if (!flags[FILE_NAME]) {
         memory_error_message();
     }
-    strncpy(args[FILE_NAME], arg, strlen(arg));
-    args[FILE_NAME][strlen(arg)] = '\0';
+    strncpy(flags[FILE_NAME], arg, strlen(arg));
+    flags[FILE_NAME][strlen(arg)] = '\0';
 
     while ((argc -= 2) >= 0) {
         arg = *++argv;
         switch (arg[1]) {
             case 'd':
-                args[DELIMITER] = parse_arg(*(++argv));
+                flags[DELIMITER] = parse_arg(*(++argv));
                 break;
             case 'i':
-                args[INCLUDE] = parse_arg(*(++argv));
+                flags[INCLUDE] = parse_arg(*(++argv));
+                break;
+            case 'p':
+                flags[PATTERN] = parse_arg(*(++argv));
                 break;
             default:
                 user_error_message();
@@ -77,11 +119,20 @@ int main(int argc, String argv[]) {
         }
     }
 
-    printf("%s | %s | %s \n", args[FILE_NAME], args[DELIMITER], args[INCLUDE]);
+    if (flags[DELIMITER] == NULL) {
+        flags[DELIMITER] = malloc(sizeof(char) * DEFFLAGSIZE);
+        flags[DELIMITER][0] = '\n';
+        flags[DELIMITER][1] = '\0';
+    }
+
+    // printf("%s | %s | %s \n", flags[FILE_NAME], flags[DELIMITER],
+        //    flags[INCLUDE]);
+
+    parse_file(flags);
 
     for (int i = 0; i < FLAGCOUNT; ++i) {
-        if (args[i]) {
-            free(args[i]);
+        if (flags[i]) {
+            free(flags[i]);
         }
     }
 
