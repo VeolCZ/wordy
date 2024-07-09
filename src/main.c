@@ -171,7 +171,7 @@ int main(int argc, String argv[]) {
                 flags[PATTERN] = parse_arg(*(++argv));
                 break;
             case 'l':
-                flags[PATTERN] = parse_arg(*(++argv));
+                flags[LENGTH] = parse_arg(*(++argv));
                 break;
             default:
                 user_error_message();
@@ -192,8 +192,8 @@ int main(int argc, String argv[]) {
         flags[COMPOSE] = strcat(flags[COMPOSE], flags[DELIMITER]);
     }
 
-    printf("%s | %s | %s | %s\n", flags[FILE_NAME], flags[DELIMITER],
-           flags[INCLUDE], flags[COMPOSE]);
+    printf("%s | %s | %s | %s | %s\n", flags[FILE_NAME], flags[DELIMITER],
+           flags[INCLUDE], flags[COMPOSE], flags[LENGTH]);
 
     parse_file(flags);
 
