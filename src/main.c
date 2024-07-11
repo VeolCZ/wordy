@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 #define DEFFLAGSIZE 100
-#define FLAGCOUNT 5
+#define FLAGCOUNT 6
 
 #define HELPTEXT \
     "Wordy is a tool for simple csv parsing.\n\n\
@@ -52,8 +52,12 @@ String parse_arg(String arg) {
 void parse_file(String *flags) {
     FILE *file = fopen(flags[FILE_NAME], "r");
     String line = malloc(sizeof(char) * DEFFLAGSIZE);
-    int i = 0, max_size = DEFFLAGSIZE;
+    int i = 0, max_size = DEFFLAGSIZE, len = 0;
     char c;
+
+    if (flags[LENGTH] != NULL) {
+        len = atoi(flags[LENGTH]);
+    }
 
     if (file == NULL) {
         error_message("Unable to open file");
@@ -66,7 +70,20 @@ void parse_file(String *flags) {
         } else if (c == flags[DELIMITER][0]) {
             line[i] = '\0';
             i = 0;
-            // Add filtering
+
+            if (flags[LENGTH] != NULL && filter_length_line(line, len) == -1)
+                continue;
+            if (flags[INCLUDE] != NULL &&
+                filter_includes_line(line, flags[INCLUDE]) == -1)
+                continue;
+            if (flags[COMPOSE] != NULL &&
+                filter_composes_line(line, flags[COMPOSE]) == -1)
+                continue;
+            if (flags[PATTERN] != NULL &&
+                filter_pattern_line(line, flags[PATTERN]) == -1)
+                continue;
+
+            printf("%s\n", line);
         } else {
             line[i++] = c;
         }
@@ -110,21 +127,19 @@ int filter_pattern_line(String line, String pattern) {
     if (line == NULL || pattern == NULL) {
         return -1;
     }
+
+    int i = 0;
     int p_size = strlen(pattern), l_size = strlen(line);
+
     if (p_size > l_size) {
-        user_error_message();
-    }
-    while (l_size > p_size) {
-        pattern = realloc(pattern, l_size);
-        while (p_size++ < l_size) {
-            pattern[p_size] = '#';
-        }
+        return -1;
     }
 
-    while (--p_size > 0) {
-        if (pattern[p_size] != '#' && pattern[p_size] != line[p_size]) {
+    while (i < p_size) {
+        if (pattern[i] != '#' && pattern[i] != line[i]) {
             return -1;
         }
+        ++i;
     }
 
     return 0;
@@ -135,7 +150,7 @@ int filter_length_line(String line, int length) {
 }
 
 int main(int argc, String argv[]) {
-    String flags[FLAGCOUNT] = {0};
+    String flags[FLAGCOUNT] = {NULL};
 
     if (argc % 2 != 0 || --argc < 1) {
         user_error_message();
@@ -157,7 +172,7 @@ int main(int argc, String argv[]) {
     flags[FILE_NAME][strlen(*argv)] = '\0';
 
     while ((argc -= 2) >= 0) {
-        switch (*(++argv)[1]) {
+        switch ((*(++argv))[1]) {
             case 'd':
                 flags[DELIMITER] = parse_arg(*(++argv));
                 break;
@@ -184,16 +199,6 @@ int main(int argc, String argv[]) {
         flags[DELIMITER][0] = '\n';
         flags[DELIMITER][1] = '\0';
     }
-
-    if (flags[COMPOSE] != NULL) {
-        flags[COMPOSE] = realloc(
-            flags[COMPOSE],
-            sizeof(char) * (strlen(flags[COMPOSE]) + strlen(flags[DELIMITER])));
-        flags[COMPOSE] = strcat(flags[COMPOSE], flags[DELIMITER]);
-    }
-
-    printf("%s | %s | %s | %s | %s\n", flags[FILE_NAME], flags[DELIMITER],
-           flags[INCLUDE], flags[COMPOSE], flags[LENGTH]);
 
     parse_file(flags);
 
